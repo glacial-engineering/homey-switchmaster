@@ -1,0 +1,49 @@
+{
+  "id": "com.glacialengineering.homey.switchmaster",
+  "version": "1.0.0",
+  "compatibility": ">=12.0.0",
+  "sdk": 3,
+  "platforms": [
+    "local"
+  ],
+  "brandColor": "#2563eb",
+  "name": {
+    "en": "SwitchMaster"
+  },
+  "description": {
+    "en": "Link any switch to any light. Pressing the switch toggles the light, and dials fade it up or down by a configurable step."
+  },
+  "category": [
+    "tools"
+  ],
+  "tags": {
+    "en": [
+      "switch",
+      "light",
+      "dimmer",
+      "dial",
+      "link",
+      "toggle",
+      "automation"
+    ]
+  },
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png",
+    "xlarge": "/assets/images/xlarge.png"
+  },
+  "permissions": [
+    "homey:manager:api",
+    "homey:manager:geolocation"
+  ],
+  "author": {
+    "name": "Glacial Engineering",
+    "email": "github@glacial.engineering"
+  },
+  "api": {
+    "getDevices": {
+      "method": "GET",
+      "path": "/devices"
+    }
+  }
+}

@@ -1,0 +1,332 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <script type="text/javascript" src="/homey.js" data-origin="settings"></script>
+    <style>
+      body { margin: 0; padding: 16px; }
+      h1 { margin-top: 0; }
+      .intro { color: #6b7280; margin-bottom: 20px; }
+      .links { display: flex; flex-direction: column; gap: 12px; }
+      .link { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+      .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 10px; align-items: end; }
+      .field { display: flex; flex-direction: column; gap: 4px; }
+      label { font-size: 12px; color: #6b7280; }
+      select, input { width: 100%; box-sizing: border-box; }
+      input.step { max-width: 90px; }
+      .remove { background: #ef4444; color: #fff; border: none; border-radius: 8px; height: 34px; padding: 0 12px; cursor: pointer; }
+      .toolbar { display: flex; gap: 10px; margin-top: 20px; }
+      #add { background: #2563eb; color: #fff; border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
+      #save { background: #111827; color: #fff; border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
+      .empty { color: #9ca3af; font-style: italic; padding: 12px 0; }
+      .hint { font-size: 11px; color: #9ca3af; }
+      @media (max-width: 760px) { .row { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <h1 data-i18n="settings.title"></h1>
+    <p class="intro" data-i18n="settings.intro"></p>
+    <div class="link" style="margin-bottom:20px;">
+      <div class="field">
+        <label data-i18n="settings.patLabel"></label>
+        <input type="password" id="pat" autocomplete="off" spellcheck="false">
+        <span class="hint" data-i18n="settings.patHint"></span>
+      </div>
+    </div>
+    <h2 data-i18n="settings.switchesTitle" style="margin:24px 0 8px;font-size:16px;"></h2>
+    <div id="links" class="links"></div>
+    <p id="empty" class="empty" data-i18n="settings.empty"></p>
+
+    <h2 data-i18n="settings.sensorsTitle" style="margin:24px 0 8px;font-size:16px;"></h2>
+    <div id="sensorLinks" class="links"></div>
+    <p id="sensorEmpty" class="empty" data-i18n="settings.sensorEmpty"></p>
+
+    <div class="toolbar">
+      <button id="add" data-i18n="settings.add"></button>
+      <button id="addSensor" data-i18n="settings.addSensor"></button>
+      <button id="save" data-i18n="settings.save"></button>
+    </div>
+    <script type="text/javascript">
+      let switches = [];
+      let lights = [];
+      let sensors = [];
+      let links = [];
+      let sensorLinks = [];
+      let homeyRef = null;
+
+      function escapeHtml(value) {
+        return String(value || '').replace(/[&<>"']/g, (char) => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;',
+        }[char]));
+      }
+
+      function deviceLabel(d) {
+        const zone = d.zone ? d.zone + ' / ' : '';
+        const suffix = d.type === 'dial' ? ' (IKEA dial)' : d.type === 'dual' ? ' (IKEA 2-button)' : '';
+        return zone + d.name + suffix;
+      }
+
+      function switchOptionsHtml(selectedId) {
+        let html = '<option value=""></option>';
+        for (const d of switches) {
+          const sel = d.id === selectedId ? ' selected' : '';
+          html += '<option value="' + escapeHtml(d.id) + '"' + sel + '>' + escapeHtml(deviceLabel(d)) + '</option>';
+        }
+        return html;
+      }
+
+      function lightOptionsHtml(selectedId) {
+        let html = '<option value=""></option>';
+        for (const d of lights) {
+          const sel = d.id === selectedId ? ' selected' : '';
+          const zone = d.zone ? d.zone + ' / ' : '';
+          html += '<option value="' + escapeHtml(d.id) + '"' + sel + '>' + escapeHtml(zone + d.name) + '</option>';
+        }
+        return html;
+      }
+
+      function sensorOptionsHtml(selectedId) {
+        let html = '<option value=""></option>';
+        for (const d of sensors) {
+          const sel = d.id === selectedId ? ' selected' : '';
+          const zone = d.zone ? d.zone + ' / ' : '';
+          html += '<option value="' + escapeHtml(d.id) + '"' + sel + '>' + escapeHtml(zone + d.name) + '</option>';
+        }
+        return html;
+      }
+
+      function selectedSwitch(link) {
+        return switches.find((x) => x.id === link.switchId) || null;
+      }
+
+      function normalizeLink(link) {
+        const sw = selectedSwitch(link);
+        link.type = sw ? sw.type : link.type || '';
+        if (link.type === 'dual') {
+          link.mode = link.mode || 'dimmer';
+          link.lightId = link.lightId || '';
+          link.lightId2 = link.lightId2 || '';
+        } else if (link.type === 'dial') {
+          link.mode = 'dial';
+          link.slots = Array.isArray(link.slots) ? link.slots : [{ lightId: '' }, { lightId: '' }, { lightId: '' }];
+          while (link.slots.length < 3) link.slots.push({ lightId: '' });
+          link.slots = link.slots.slice(0, 3).map((slot) => ({ lightId: slot && slot.lightId ? slot.lightId : '' }));
+        }
+        link.fadeStep = Number.isFinite(Number(link.fadeStep)) ? Math.abs(Number(link.fadeStep)) : 8;
+        return link;
+      }
+
+      function renderDualFields(link) {
+        const showSecond = link.mode === 'split';
+        return ''
+          + '<div class="field"><label data-i18n="settings.mode"></label><select data-role="mode">'
+          + '<option value="dimmer"' + (link.mode === 'dimmer' ? ' selected' : '') + ' data-i18n="settings.modeDimmer"></option>'
+          + '<option value="onoff"' + (link.mode === 'onoff' ? ' selected' : '') + ' data-i18n="settings.modeOnoff"></option>'
+          + '<option value="split"' + (link.mode === 'split' ? ' selected' : '') + ' data-i18n="settings.modeSplit"></option>'
+          + '</select></div>'
+          + '<div class="field"><label data-i18n="' + (showSecond ? 'settings.topLight' : 'settings.light') + '"></label><select data-role="light">' + lightOptionsHtml(link.lightId) + '</select></div>'
+          + '<div class="field" style="' + (showSecond ? '' : 'display:none') + '"><label data-i18n="settings.bottomLight"></label><select data-role="light2">' + lightOptionsHtml(link.lightId2) + '</select></div>'
+          + '<div class="field" style="' + (link.mode === 'dimmer' ? '' : 'display:none') + '"><label data-i18n="settings.fadeStep"></label><input class="step" type="number" min="1" max="100" data-role="fadeStep" value="' + link.fadeStep + '"></div>';
+      }
+
+      function renderDialFields(link) {
+        return ''
+          + '<div class="field"><label data-i18n="settings.slot1"></label><select data-role="slot1">' + lightOptionsHtml(link.slots[0].lightId) + '</select></div>'
+          + '<div class="field"><label data-i18n="settings.slot2"></label><select data-role="slot2">' + lightOptionsHtml(link.slots[1].lightId) + '</select></div>'
+          + '<div class="field"><label data-i18n="settings.slot3"></label><select data-role="slot3">' + lightOptionsHtml(link.slots[2].lightId) + '</select></div>'
+          + '<div class="field"><label data-i18n="settings.fadeStep"></label><input class="step" type="number" min="1" max="100" data-role="fadeStep" value="' + link.fadeStep + '"></div>';
+      }
+
+      function render() {
+        const container = document.getElementById('links');
+        const empty = document.getElementById('empty');
+        container.innerHTML = '';
+        empty.style.display = links.length ? 'none' : 'block';
+
+        links.forEach((link, index) => {
+          normalizeLink(link);
+          const row = document.createElement('div');
+          row.className = 'link';
+          row.innerHTML = ''
+            + '<div class="row"><div class="field"><label data-i18n="settings.switch"></label><select data-role="switch">' + switchOptionsHtml(link.switchId) + '</select></div>'
+            + (link.type === 'dial' ? renderDialFields(link) : renderDualFields(link))
+            + '<button class="remove" data-i18n="settings.remove"></button></div>'
+            + '<div class="hint" data-i18n="' + (link.type === 'dial' ? 'settings.dialHint' : 'settings.dualHint') + '"></div>';
+
+          row.querySelector('[data-role="switch"]').addEventListener('change', (e) => {
+            link.switchId = e.target.value;
+            const sw = selectedSwitch(link);
+            link.type = sw ? sw.type : '';
+            link.mode = link.type === 'dial' ? 'dial' : 'dimmer';
+            render();
+          });
+
+          const mode = row.querySelector('[data-role="mode"]');
+          if (mode) mode.addEventListener('change', (e) => { link.mode = e.target.value; render(); });
+
+          const light = row.querySelector('[data-role="light"]');
+          if (light) light.addEventListener('change', (e) => { link.lightId = e.target.value; });
+
+          const light2 = row.querySelector('[data-role="light2"]');
+          if (light2) light2.addEventListener('change', (e) => { link.lightId2 = e.target.value; });
+
+          ['slot1', 'slot2', 'slot3'].forEach((role, slotIndex) => {
+            const slot = row.querySelector('[data-role="' + role + '"]');
+            if (slot) slot.addEventListener('change', (e) => { link.slots[slotIndex].lightId = e.target.value; });
+          });
+
+          const fadeStep = row.querySelector('[data-role="fadeStep"]');
+          if (fadeStep) fadeStep.addEventListener('input', (e) => { link.fadeStep = Math.abs(Number(e.target.value)); });
+
+          row.querySelector('.remove').addEventListener('click', () => {
+            links.splice(index, 1);
+            render();
+          });
+
+          container.appendChild(row);
+        });
+
+        if (homeyRef) homeyRef.translateElement(container);
+        renderSensors();
+      }
+
+      function renderSensors() {
+        const container = document.getElementById('sensorLinks');
+        const empty = document.getElementById('sensorEmpty');
+        container.innerHTML = '';
+        empty.style.display = sensorLinks.length ? 'none' : 'block';
+
+        sensorLinks.forEach((link, index) => {
+          link.mode = link.mode || 'normal';
+          link.timeoutMinutes = Number.isFinite(Number(link.timeoutMinutes)) ? Math.max(1, Math.min(120, Number(link.timeoutMinutes))) : 5;
+          link.sunsetBright = Number.isFinite(Number(link.sunsetBright)) ? Math.max(0, Math.min(100, Number(link.sunsetBright))) : 50;
+          link.midnightBright = Number.isFinite(Number(link.midnightBright)) ? Math.max(0, Math.min(100, Number(link.midnightBright))) : 5;
+
+          const isNight = link.mode === 'night';
+          const row = document.createElement('div');
+          row.className = 'link';
+          row.innerHTML = ''
+            + '<div class="row">'
+            + '<div class="field"><label data-i18n="settings.sensor"></label><select data-role="sensor">' + sensorOptionsHtml(link.sensorId) + '</select></div>'
+            + '<div class="field"><label data-i18n="settings.sensorLight"></label><select data-role="light">' + lightOptionsHtml(link.lightId) + '</select></div>'
+            + '<div class="field"><label data-i18n="settings.sensorMode"></label><select data-role="mode">'
+            + '<option value="normal"' + (link.mode === 'normal' ? ' selected' : '') + ' data-i18n="settings.sensorModeNormal"></option>'
+            + '<option value="night"' + (link.mode === 'night' ? ' selected' : '') + ' data-i18n="settings.sensorModeNight"></option>'
+            + '</select></div>'
+            + '<div class="field"><label data-i18n="settings.sensorTimeout"></label><input class="step" type="number" min="1" max="120" data-role="timeoutMinutes" value="' + link.timeoutMinutes + '"></div>'
+            + '<div class="field" style="' + (isNight ? '' : 'display:none') + '"><label data-i18n="settings.sensorSunsetBright"></label><input class="step" type="number" min="0" max="100" data-role="sunsetBright" value="' + link.sunsetBright + '"></div>'
+            + '<div class="field" style="' + (isNight ? '' : 'display:none') + '"><label data-i18n="settings.sensorMidnightBright"></label><input class="step" type="number" min="0" max="100" data-role="midnightBright" value="' + link.midnightBright + '"></div>'
+            + '<button class="remove" data-i18n="settings.remove"></button></div>';
+
+          row.querySelector('[data-role="sensor"]').addEventListener('change', (e) => { link.sensorId = e.target.value; });
+          row.querySelector('[data-role="light"]').addEventListener('change', (e) => { link.lightId = e.target.value; });
+          const mode = row.querySelector('[data-role="mode"]');
+          if (mode) mode.addEventListener('change', (e) => { link.mode = e.target.value; renderSensors(); });
+          const timeout = row.querySelector('[data-role="timeoutMinutes"]');
+          if (timeout) timeout.addEventListener('input', (e) => { link.timeoutMinutes = Math.max(1, Math.min(120, Number(e.target.value))); });
+          const sunsetBright = row.querySelector('[data-role="sunsetBright"]');
+          if (sunsetBright) sunsetBright.addEventListener('input', (e) => { link.sunsetBright = Math.max(0, Math.min(100, Number(e.target.value))); });
+          const midnightBright = row.querySelector('[data-role="midnightBright"]');
+          if (midnightBright) midnightBright.addEventListener('input', (e) => { link.midnightBright = Math.max(0, Math.min(100, Number(e.target.value))); });
+          row.querySelector('.remove').addEventListener('click', () => {
+            sensorLinks.splice(index, 1);
+            renderSensors();
+          });
+
+          container.appendChild(row);
+        });
+
+        if (homeyRef) homeyRef.translateElement(container);
+      }
+
+      function onHomeyReady(Homey) {
+        homeyRef = Homey;
+
+        Homey.get('pat', (err, value) => {
+          if (!err && typeof value === 'string') {
+            const el = document.getElementById('pat');
+            if (el) el.value = value;
+          }
+        });
+
+        Homey.get('links', (err, value) => {
+          if (!err && Array.isArray(value)) {
+            links = value.map((l) => normalizeLink({
+              switchId: l.switchId || '',
+              type: l.type || '',
+              mode: l.mode || 'dimmer',
+              lightId: l.lightId || '',
+              lightId2: l.lightId2 || '',
+              slots: Array.isArray(l.slots) ? l.slots : [{ lightId: '' }, { lightId: '' }, { lightId: '' }],
+              fadeStep: Number.isFinite(Number(l.fadeStep)) ? Math.abs(Number(l.fadeStep)) : 8,
+            }));
+          }
+        });
+
+        Homey.get('sensorLinks', (err, value) => {
+          if (!err && Array.isArray(value)) {
+            sensorLinks = value.map((l) => ({
+              sensorId: l.sensorId || '',
+              lightId: l.lightId || '',
+              mode: l.mode || 'normal',
+              timeoutMinutes: Number.isFinite(Number(l.timeoutMinutes)) ? Math.max(1, Math.min(120, Number(l.timeoutMinutes))) : 5,
+              sunsetBright: Number.isFinite(Number(l.sunsetBright)) ? Math.max(0, Math.min(100, Number(l.sunsetBright))) : 50,
+              midnightBright: Number.isFinite(Number(l.midnightBright)) ? Math.max(0, Math.min(100, Number(l.midnightBright))) : 5,
+            }));
+          }
+
+          Homey.api('GET', '/devices', null, (apiErr, result) => {
+            if (apiErr) {
+              Homey.alert(apiErr.message || String(apiErr));
+            } else {
+              switches = result && Array.isArray(result.switches) ? result.switches : [];
+              lights = result && Array.isArray(result.lights) ? result.lights : [];
+              sensors = result && Array.isArray(result.sensors) ? result.sensors : [];
+            }
+            render();
+            Homey.ready();
+          });
+        });
+
+        document.getElementById('add').addEventListener('click', () => {
+          links.push({ switchId: '', type: '', mode: 'dimmer', lightId: '', lightId2: '', slots: [{ lightId: '' }, { lightId: '' }, { lightId: '' }], fadeStep: 8 });
+          render();
+        });
+
+        document.getElementById('addSensor').addEventListener('click', () => {
+          sensorLinks.push({ sensorId: '', lightId: '', mode: 'normal', timeoutMinutes: 5, sunsetBright: 50, midnightBright: 5 });
+          renderSensors();
+        });
+
+        document.getElementById('save').addEventListener('click', () => {
+          const clean = links.map((l) => normalizeLink(l)).filter((l) => {
+            if (!l.switchId) return false;
+            if (l.type === 'dial') return l.slots.some((slot) => slot.lightId);
+            if (l.mode === 'split') return l.lightId && l.lightId2;
+            return l.lightId;
+          });
+          const cleanSensors = sensorLinks.filter((l) => l.sensorId && l.lightId);
+          const patEl = document.getElementById('pat');
+          const pat = patEl ? patEl.value.trim() : '';
+          Homey.set('pat', pat, (patErr) => {
+            if (patErr) return Homey.alert(patErr.message || String(patErr));
+            Homey.set('links', clean, (err) => {
+              if (err) return Homey.alert(err.message || String(err));
+              links = clean;
+              Homey.set('sensorLinks', cleanSensors, (sensorErr) => {
+                if (sensorErr) return Homey.alert(sensorErr.message || String(sensorErr));
+                sensorLinks = cleanSensors;
+                render();
+                Homey.alert(Homey.__('settings.saved'));
+              });
+            });
+          });
+        });
+      }
+    </script>
+  </body>
+</html>

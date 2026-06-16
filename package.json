@@ -1,0 +1,12 @@
+{
+  "name": "com.glacialengineering.homey.switchmaster",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "homey-api": "^3.0.16",
+    "suncalc": "1.9.0"
+  }
+}
