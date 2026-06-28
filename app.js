@@ -10,7 +10,6 @@ const PAT_KEY = 'pat';
 const DEFAULT_FADE_UP = 8;
 const DEFAULT_FADE_DOWN = -8;
 const DEFAULT_FADE_STEP = 8;
-const FLOW_NAME_PREFIX = '[SwitchMaster]';
 const DUAL_BUTTON_DRIVER_ID = 'homey:app:com.ikea.tradfri:matter_bilresa_dual_button';
 const SCROLL_WHEEL_DRIVER_ID = 'homey:app:com.ikea.tradfri:matter_bilresa_scroll_wheel';
 
@@ -21,15 +20,33 @@ class SwitchMasterApp extends Homey.App {
     this.sensorInstances = [];
     this.sensorTimers = new Map();
 
+    // Serialize rebuilds so overlapping runs can't tear down sensors mid-bind
+    // or race the Flow sync. The settings page fires three separate set() calls
+    // per Save (pat -> links -> sensorLinks); debouncing coalesces them.
+    this._rebuildChain = Promise.resolve();
+    this._rebuildTimer = null;
+
     await this.rebuildLinks();
 
     this.homey.settings.on('set', (key) => {
       if (key === LINKS_KEY || key === SENSOR_LINKS_KEY || key === PAT_KEY) {
-        this.rebuildLinks().catch((err) => this.error('rebuildLinks failed', err));
+        this.scheduleRebuild();
       }
     });
 
     this.log('SwitchMaster initialized');
+  }
+
+  // Coalesce the burst of settings writes from one Save into a single rebuild,
+  // and chain rebuilds so they never overlap.
+  scheduleRebuild() {
+    if (this._rebuildTimer) this.homey.clearTimeout(this._rebuildTimer);
+    this._rebuildTimer = this.homey.setTimeout(() => {
+      this._rebuildTimer = null;
+      this._rebuildChain = this._rebuildChain
+        .then(() => this.rebuildLinks())
+        .catch((err) => this.error('rebuildLinks failed', err));
+    }, 500);
   }
 
   // Returns a client that can manage Flows. App tokens lack the flow scope, so
@@ -232,47 +249,57 @@ class SwitchMasterApp extends Homey.App {
     }
   }
 
-  bindSensors() {
+  async bindSensors() {
     const links = this.getSensorLinks();
     if (links.length === 0) return;
 
-    this.api.devices.getDevices().then((devices) => {
-      for (const link of links) {
-        const sensor = devices[link.sensorId];
-        if (!sensor) {
-          this.error(`Sensor ${link.sensorId} not found, skipping`);
-          continue;
-        }
-        const caps = sensor.capabilities || [];
-        if (!caps.includes('alarm_motion')) {
-          this.error(`Sensor "${sensor.name}" has no alarm_motion capability`);
-          continue;
-        }
+    let devices;
+    try {
+      devices = await this.api.devices.getDevices();
+    } catch (err) {
+      this.error('bindSensors failed:', err);
+      return;
+    }
 
-        const instance = sensor.makeCapabilityInstance('alarm_motion', (value) => {
-          if (value === true) {
-            // Motion detected: turn on and reset off-timer
-            const existing = this.sensorTimers.get(link.sensorId);
-            if (existing) clearTimeout(existing);
-
-            this.turnOnSensorLight(link)
-              .then(() => this.log(`Sensor "${sensor.name}" triggered light "${link.lightId}"`))
-              .catch((err) => this.error(`turnOnSensorLight failed: ${err.message || err}`));
-
-            const timeoutMs = link.timeoutMinutes * 60 * 1000;
-            const timer = setTimeout(() => {
-              this.sensorTimers.delete(link.sensorId);
-              this.turnOffSensorLight(link)
-                .then(() => this.log(`Sensor "${sensor.name}" timed out, light off`))
-                .catch((err) => this.error(`turnOffSensorLight failed: ${err.message || err}`));
-            }, timeoutMs);
-            this.sensorTimers.set(link.sensorId, timer);
-          }
-        });
-        this.sensorInstances.push(instance);
-        this.log(`Bound sensor "${sensor.name}" -> ${link.lightId} (mode:${link.mode} timeout:${link.timeoutMinutes}m)`);
+    links.forEach((link, index) => {
+      const sensor = devices[link.sensorId];
+      if (!sensor) {
+        this.error(`Sensor ${link.sensorId} not found, skipping`);
+        return;
       }
-    }).catch((err) => this.error('bindSensors failed:', err));
+      const caps = sensor.capabilities || [];
+      if (!caps.includes('alarm_motion')) {
+        this.error(`Sensor "${sensor.name}" has no alarm_motion capability`);
+        return;
+      }
+
+      // Key timers per link, not per sensor, so one sensor driving two lights
+      // doesn't clobber the other's off-timer.
+      const timerKey = `${link.sensorId}:${index}`;
+
+      const instance = sensor.makeCapabilityInstance('alarm_motion', (value) => {
+        if (value === true) {
+          // Motion detected: turn on and reset off-timer
+          const existing = this.sensorTimers.get(timerKey);
+          if (existing) clearTimeout(existing);
+
+          this.turnOnSensorLight(link)
+            .then(() => this.log(`Sensor "${sensor.name}" triggered light "${link.lightId}"`))
+            .catch((err) => this.error(`turnOnSensorLight failed: ${err.message || err}`));
+
+          const timeoutMs = link.timeoutMinutes * 60 * 1000;
+          const timer = setTimeout(() => {
+            this.sensorTimers.delete(timerKey);
+            this.turnOffSensorLight(link)
+              .then(() => this.log(`Sensor "${sensor.name}" timed out, light off`))
+              .catch((err) => this.error(`turnOffSensorLight failed: ${err.message || err}`));
+          }, timeoutMs);
+          this.sensorTimers.set(timerKey, timer);
+        }
+      });
+      this.sensorInstances.push(instance);
+      this.log(`Bound sensor "${sensor.name}" -> ${link.lightId} (mode:${link.mode} timeout:${link.timeoutMinutes}m)`);
+    });
   }
 
   getSwitchType(device) {
@@ -282,27 +309,33 @@ class SwitchMasterApp extends Homey.App {
     return '';
   }
 
-  flowCard(id, args = {}) {
-    return { id, args };
+  // Homey resolves a Flow card in the editor by its `uri` (the card-type URI),
+  // which is the card id prefixed with the card kind. Without it the flow still
+  // saves and triggers, but the editor can't find the card definition and
+  // renders it blank. `kind` is 'trigger' or 'action'.
+  flowCard(kind, id, args = {}) {
+    const prefix = kind === 'trigger' ? 'homey:flowcardtrigger:' : 'homey:flowcardaction:';
+    return { id, uri: `${prefix}${id}`, args };
   }
 
   triggerForButton(switchId, buttonId) {
-    return this.flowCard(`homey:device:${switchId}:switch_press_multi`, { button: String(buttonId) });
+    return this.flowCard('trigger', `homey:device:${switchId}:switch_press_multi`, { button: String(buttonId) });
   }
 
   lightAction(light, action, stepPercent) {
     const caps = light.capabilities || [];
     const baseId = `homey:device:${light.id}`;
+    const card = (id, args) => this.flowCard('action', id, args);
 
-    if (action === 'toggle' && caps.includes('onoff')) return this.flowCard(`${baseId}:toggle`);
-    if (action === 'on' && caps.includes('onoff')) return this.flowCard(`${baseId}:on`);
-    if (action === 'off' && caps.includes('onoff')) return this.flowCard(`${baseId}:off`);
+    if (action === 'toggle' && caps.includes('onoff')) return card(`${baseId}:toggle`);
+    if (action === 'on' && caps.includes('onoff')) return card(`${baseId}:on`);
+    if (action === 'off' && caps.includes('onoff')) return card(`${baseId}:off`);
     if (action === 'dim' && caps.includes('dim')) {
-      return this.flowCard(`${baseId}:dim_relative`, { dim: stepPercent / 100 });
+      return card(`${baseId}:dim_relative`, { dim: stepPercent / 100 });
     }
-    if (action === 'on' && caps.includes('dim')) return this.flowCard(`${baseId}:dim`, { dim: 1 });
-    if (action === 'off' && caps.includes('dim')) return this.flowCard(`${baseId}:dim`, { dim: 0 });
-    if (action === 'dim' && caps.includes('onoff')) return this.flowCard(`${baseId}:${stepPercent > 0 ? 'on' : 'off'}`);
+    if (action === 'on' && caps.includes('dim')) return card(`${baseId}:dim`, { dim: 1 });
+    if (action === 'off' && caps.includes('dim')) return card(`${baseId}:dim`, { dim: 0 });
+    if (action === 'dim' && caps.includes('onoff')) return card(`${baseId}:${stepPercent > 0 ? 'on' : 'off'}`);
 
     return null;
   }
@@ -323,23 +356,33 @@ class SwitchMasterApp extends Homey.App {
   }
 
   makeFlow(name, trigger, action, folderId) {
+    // Standard ("simple") flows tag each action as belonging to the "Then..."
+    // column. Without group/delay/duration the card renders blank and the flow
+    // may not show correctly in the mobile app.
+    const thenAction = action ? { delay: null, duration: null, ...action, group: 'then' } : action;
     return {
       name,
       enabled: true,
       folder: folderId || null,
       trigger,
       conditions: [],
-      actions: [action],
+      actions: [thenAction],
     };
   }
 
   addFlow(flows, flow) {
-    if (flow && flow.trigger && flow.actions && flow.actions[0]) flows.push(flow);
+    if (flow && flow.trigger && flow.actions && flow.actions[0]) {
+      flows.push(flow);
+    } else if (flow && flow.name) {
+      // Action came back null (e.g. light group lacks the expected capability),
+      // so the flow is silently dropped. Surface it instead of failing quietly.
+      this.error(`Skipped Flow "${flow.name}": no usable light action (light is missing onoff/dim, or action not supported)`);
+    }
   }
 
   buildDualButtonFlows(link, sw, light, light2, folderId) {
     const flows = [];
-    const prefix = `${FLOW_NAME_PREFIX} ${sw.name}`;
+    const prefix = sw.name;
 
     if (link.mode === 'onoff') {
       this.addFlow(flows, this.makeFlow(
@@ -391,7 +434,7 @@ class SwitchMasterApp extends Homey.App {
 
   buildDialFlows(link, sw, devices, folderId) {
     const flows = [];
-    const prefix = `${FLOW_NAME_PREFIX} ${sw.name}`;
+    const prefix = sw.name;
     const buttons = [
       { slot: 1, up: 1, down: 2, press: 3 },
       { slot: 2, up: 4, down: 5, press: 6 },
@@ -454,7 +497,7 @@ class SwitchMasterApp extends Homey.App {
       }
     }
 
-    return flows;
+    return { flows, folderId };
   }
 
   async syncGeneratedFlows() {
@@ -465,15 +508,17 @@ class SwitchMasterApp extends Homey.App {
     }
 
     try {
-      const [desired, existingMap] = await Promise.all([
+      const [{ flows: desired, folderId }, existingMap] = await Promise.all([
         this.buildDesiredFlows(flowApi),
         flowApi.flow.getFlows(),
       ]);
       this.log(`Flow sync: ${desired.length} desired flow(s) built from settings`);
 
+      // Identify flows we own by their folder, not a name prefix, so generated
+      // flow names can be clean (the folder already groups them).
       const desiredByName = new Map(desired.map((flow) => [flow.name, flow]));
       const existing = Object.values(existingMap)
-        .filter((flow) => flow.name && flow.name.startsWith(FLOW_NAME_PREFIX));
+        .filter((flow) => folderId && flow.folder === folderId);
       const existingByName = new Map();
 
       for (const flow of existing) {
@@ -518,7 +563,7 @@ class SwitchMasterApp extends Homey.App {
   async rebuildLinks() {
     this.teardownSensors();
     await this.syncGeneratedFlows();
-    this.bindSensors();
+    await this.bindSensors();
   }
 }
 
