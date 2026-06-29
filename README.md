@@ -1,114 +1,136 @@
 # SwitchMaster
 
-A Homey Pro app that links **IKEA BILRESA remotes** and **motion sensors** to **lights**. It has **no devices and no Flow
-cards** — everything is configured on the app's **settings page**.
+**Turn your IKEA remotes and motion sensors into smart light controls — without building a single Flow by hand.**
 
-## What it does
+SwitchMaster lets you point an IKEA BILRESA remote (or a motion sensor) at a light and pick how it
+should behave. That's it. The app quietly builds and maintains the Homey Flows behind the scenes, so
+you never have to wire up trigger-and-action cards yourself.
 
-### IKEA BILRESA Remote to Light Links
-Switch links are **IKEA-specific** and work with two BILRESA remote types:
-- **BILRESA Dual Button** (`homey:app:com.ikea.tradfri:matter_bilresa_dual_button`)
-- **BILRESA Scroll Wheel** (`homey:app:com.ikea.tradfri:matter_bilresa_scroll_wheel`)
+---
 
-The app **auto-generates Homey Flows** for these remotes — no manual Flow configuration needed. Flows are managed via the Homey Flow API using a Personal Access Token (PAT) configured in settings.
+## Why this app exists
 
-**Dual Button modes:**
-- **Dimmer:** Top button dims up, bottom dims down (one light)
-- **On/Off:** Top turns on, bottom turns off (one light)
-- **Split:** Top toggles light 1, bottom toggles light 2
+Setting up a single remote button or motion sensor in Homey normally means creating a Flow for
+*every* action: one for "top button pressed → dim up," another for "bottom button pressed → dim
+down," and so on. A single scroll-wheel remote can need **nine** Flows. Do that for a few rooms and
+you're maintaining dozens of near-identical Flows by hand — and re-editing all of them whenever you
+swap a bulb or change your mind.
+
+SwitchMaster replaces that busywork with a simple list. You say *"this remote controls that light,
+in dimmer mode"* on one screen, and the app generates the correct Flows for you, keeps them in sync
+when you change the settings, and tidies them away in their own folder. Change your mind later? Edit
+one row and save — the Flows update themselves.
+
+The same idea applies to motion sensors: pick a sensor, pick a light, choose how bright and for how
+long. SwitchMaster handles the rest, including a **night mode** that automatically dims the light as
+the evening gets later so a midnight bathroom trip doesn't blind you.
+
+---
+
+## What you can do
+
+### 💡 IKEA remotes → lights
+
+Works with two IKEA BILRESA remote types:
+
+- **BILRESA Dual Button** (the two-button remote)
+- **BILRESA Scroll Wheel** (the dial remote)
+
+**Dual Button — three modes:**
+
+| Mode | Top button | Bottom button |
+|------|-----------|---------------|
+| **Dimmer** | Dims the light up | Dims the light down |
+| **On / Off** | Turns the light on | Turns the light off |
+| **Two toggles** | Toggles light A | Toggles light B |
 
 **Scroll Wheel:**
-- 3 light slots, each with scroll up/down (relative dim step) and press (toggle)
-- Configurable fade step (default ±8%)
 
-### Motion Sensor to Light Links
-- **Motion detected → turn on linked light.** When a motion sensor's `alarm_motion` capability triggers,
-  the linked light turns on.
-- **Two modes:**
-  - **Normal:** Full brightness, turns off after a configurable timeout (default 5 minutes).
-  - **Night:** Dimmed brightness based on time of day, interpolates from sunset brightness to midnight
-    brightness, then holds at midnight brightness until sunrise. Turns off after timeout.
-- **Timezone-aware:** Uses Homey's configured timezone and latitude/longitude to compute accurate
-  sunset/sunrise times for the night mode interpolation.
+The dial has **three slots**, and each slot can control a different light. For every slot you assign:
+scroll up to brighten, scroll down to dim, and press to toggle on/off. You choose how big each dim
+step is (default ±8%).
 
-## How it works
+### 🚶 Motion sensors → lights
 
-### Switch Links (IKEA BILRESA)
-- Uses the local Homey Web API (`homey-api`, permission `homey:manager:api`) to enumerate devices.
-- Switch links are stored in app settings (`links`) with mode, light IDs, and fade step configuration.
-- On boot and whenever settings change, the app **auto-generates Homey Flows** for each linked IKEA remote.
-- Flows are created/updated/deleted via the Homey Flow API using a **Personal Access Token (PAT)** configured in settings.
-- Generated Flows are stored in a `__SwitchMaster` folder for easy identification.
-- App tokens lack Flow management scope, so a PAT is required for Flow operations.
+Pick a motion sensor and a light, and the light comes on when motion is detected, then turns itself
+off after a timeout you set.
 
-### Motion Sensor Links
-- Uses `device.makeCapabilityInstance` to listen for `alarm_motion` capability changes.
-- Motion sensor links are stored in app settings (`sensorLinks`) with mode, timeout, and brightness settings.
-- On motion detected, the linked light turns on with computed brightness (full for normal mode, interpolated for night mode).
-- After the configured timeout, the light turns off automatically.
-- For night mode, uses `suncalc` with Homey's latitude/longitude and timezone to compute sunset/sunrise
-  times and interpolate brightness between sunset and midnight.
+- **Normal mode** — light comes on at full brightness, turns off after the timeout (default 5 minutes).
+- **Night mode** — light comes on dimmed, and *how* dimmed depends on the time of night. It starts at
+  your chosen **sunset brightness** and smoothly fades down to your **midnight brightness** as the
+  evening progresses, holding there until sunrise. SwitchMaster uses your Homey's location and
+  timezone to calculate sunset and sunrise accurately, so it adapts across the seasons on its own.
 
-## Configure
+---
 
-Open **Settings** for the app:
+## Getting started
 
-### Personal Access Token (Required for Switch Links)
-1. Generate a **Personal Access Token (PAT)** in Homey (Profile → Personal Access Tokens → Create).
-2. Give it full owner scopes (required for Flow management).
-3. Paste the token into the **Personal Access Token** field in SwitchMaster settings.
-4. **Save**.
+Everything is configured on the app's **Settings** page — SwitchMaster adds no devices of its own.
 
-Without a PAT, switch links will not work (the app cannot generate/manage Flows with app tokens alone).
+### 1. Add a Personal Access Token (required for remotes)
 
-### Switch Links (IKEA BILRESA Only)
-1. Click **Add link**.
-2. Pick an **IKEA BILRESA remote** from the dropdown (only BILRESA devices are shown).
-3. Choose the **Mode** (for Dual Button):
-   - **Dimmer:** Top dims up, bottom dims down
-   - **On/Off:** Top on, bottom off
-   - **Split:** Top toggles light 1, bottom toggles light 2
-4. For Scroll Wheel, configure up to **3 light slots** with scroll up/down and press actions.
-5. Set the **Fade step %** (default 8%) for relative dimming.
-6. **Save**.
+To create and manage Flows for you, SwitchMaster needs a Personal Access Token (PAT). This is a
+one-time setup:
 
-The app will automatically generate the required Flows in the `__SwitchMaster` folder.
+1. Go to **[my.homey.app](https://my.homey.app) → Settings → API Keys** and create a new key with
+   **Flow** access (full owner scope is simplest).
+2. Copy the token.
+3. Paste it into the **Personal Access Token** field at the top of SwitchMaster's settings and
+   **Save**.
 
-### Motion Sensor Links
+> **Why is this needed?** Homey only allows Flows to be managed with a personal token, not with the
+> token an app gets by default. The PAT is stored locally on your Homey and never leaves it.
+>
+> Motion-sensor links work *without* a PAT — it's only required for the IKEA remote links, since
+> those are the ones powered by auto-generated Flows.
+
+### 2. Link a remote
+
+1. Click **Add remote**.
+2. Choose your IKEA BILRESA remote (only supported remotes appear in the list).
+3. Pick the mode and the light(s) it should control. For a scroll wheel, assign lights to up to three
+   slots.
+4. Set the dim step if you like, then **Save**.
+
+SwitchMaster generates the matching Flows and files them in a folder called **`__SwitchMaster`**.
+You can look in there to see exactly what it created — but you never need to touch them.
+
+### 3. Link a motion sensor
+
 1. Click **Add sensor**.
-2. Pick a **Motion Sensor** and a **Light** from the dropdowns.
-3. Choose the **Mode**:
-   - **Normal:** Full brightness, turns off after timeout.
-   - **Night:** Dimmed brightness based on time of day.
-4. For night mode, set:
-   - **Timeout:** How long (in minutes) the light stays on after motion stops.
-   - **Sunset brightness %:** Brightness at sunset (e.g., 50%).
-   - **Midnight brightness %:** Brightness at midnight (e.g., 5%).
-5. **Save**.
+2. Choose a motion sensor and the light it should control.
+3. Pick **Normal** or **Night** mode, set the timeout (and, for night mode, the sunset and midnight
+   brightness), then **Save**.
 
-The dropdowns are populated live from your Homey, so this is also the easiest way to see which
-remotes, sensors, and lights are available.
+The dropdowns are populated live from your Homey, so the settings page doubles as an easy way to see
+which remotes, sensors, and lights you have available.
 
-## Files
+---
 
-- `app.json` — manifest (settings view, `getDevices` Web API route, `homey:manager:api`).
-- `app.js` — link engine: HomeyAPI, listeners, toggle + dial-step fade.
-- `api.js` — `GET /devices` route used by the settings page.
-- `settings/index.html` — the link configuration UI.
+## Good to know
 
-## Development
+- **Editing is safe.** Change a row and save, and SwitchMaster updates the corresponding Flows.
+  Remove a row and save, and it cleans up the Flows it created. It only ever manages Flows in its own
+  `__SwitchMaster` folder, so your hand-made Flows are never touched.
+- **It works locally.** SwitchMaster runs entirely on your Homey Pro using the local API.
+- **One light, two controllers.** It's fine to have, say, a motion sensor *and* a remote both pointed
+  at the same light — the motion sensor switches it directly, and the remote does so through a Flow.
 
-All tooling runs in Docker (never run `npm`/`node` directly on the host). The Homey CLI is run
-locally:
+---
+
+## For developers
+
+The app is small and has three meaningful files:
+
+- `app.js` — the engine: reads the settings, generates/syncs Flows for remotes, and binds motion
+  sensor listeners.
+- `api.js` — a single `GET /devices` route that feeds the settings page its dropdown data.
+- `settings/index.html` — the configuration UI.
+
+Run it on your own Homey Pro with live logs:
 
 ```bash
-# one-time: install deps + generate placeholder images (in Docker)
-docker run --rm -v "$PWD":/app -w /app node:20 npm install
-docker run --rm -v "$PWD":/app -w /app node:20 node tools/generate-placeholder-images.js
-
-# run on your Homey Pro with live logs
-homey app run
-
-# structural validation
-homey app validate --level publish
+npm install          # install dependencies
+homey app run        # build, install, and stream logs from your Homey
+homey app validate   # structural validation
 ```

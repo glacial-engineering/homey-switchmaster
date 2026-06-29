@@ -2,49 +2,358 @@
 <html>
   <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <script type="text/javascript" src="/homey.js" data-origin="settings"></script>
     <style>
-      body { margin: 0; padding: 16px; }
-      h1 { margin-top: 0; }
-      .intro { color: #6b7280; margin-bottom: 20px; }
-      .links { display: flex; flex-direction: column; gap: 12px; }
-      .link { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-      .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 10px; align-items: end; }
-      .field { display: flex; flex-direction: column; gap: 4px; }
-      label { font-size: 12px; color: #6b7280; }
-      select, input { width: 100%; box-sizing: border-box; }
-      input.step { max-width: 90px; }
-      .remove { background: #ef4444; color: #fff; border: none; border-radius: 8px; height: 34px; padding: 0 12px; cursor: pointer; }
-      .toolbar { display: flex; gap: 10px; margin-top: 20px; }
-      #add { background: #2563eb; color: #fff; border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
-      #save { background: #111827; color: #fff; border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
-      .empty { color: #9ca3af; font-style: italic; padding: 12px 0; }
-      .hint { font-size: 11px; color: #9ca3af; }
-      @media (max-width: 760px) { .row { grid-template-columns: 1fr; } }
+      :root {
+        --bg: #f5f6f8;
+        --surface: #ffffff;
+        --surface-soft: #f9fafb;
+        --border: #e6e8ec;
+        --text: #1f2430;
+        --text-soft: #6b7280;
+        --text-faint: #9aa1ad;
+        --brand: #2563eb;
+        --brand-soft: #eaf0ff;
+        --danger: #ef4444;
+        --danger-soft: #fef2f2;
+        --radius: 14px;
+        --radius-sm: 10px;
+        --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 16px rgba(16, 24, 40, 0.06);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #14161a;
+          --surface: #1c1f26;
+          --surface-soft: #22262f;
+          --border: #2c313b;
+          --text: #e8eaed;
+          --text-soft: #9aa1ad;
+          --text-faint: #6b7280;
+          --brand: #5b8bff;
+          --brand-soft: #1f2a44;
+          --danger: #f87171;
+          --danger-soft: #2a1d1f;
+          --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.35);
+        }
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        padding: 24px 18px 56px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .wrap { max-width: 720px; margin: 0 auto; }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .intro {
+        color: var(--text-soft);
+        margin: 0 0 24px;
+        font-size: 14px;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 4px;
+        padding: 4px;
+        margin: 4px 0 18px;
+        background: var(--surface-soft);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+      }
+      .tab {
+        flex: 1;
+        height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-soft);
+        background: transparent;
+        border: none;
+        border-radius: 9px;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+      }
+      .tab:hover { color: var(--text); }
+      .tab.is-active {
+        color: var(--brand);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+      .tab .count {
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text-soft);
+        background: var(--border);
+        border-radius: 999px;
+      }
+      .tab.is-active .count { color: #fff; background: var(--brand); }
+
+      .panel { display: none; }
+      .panel.is-active { display: block; }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px;
+        box-shadow: var(--shadow);
+      }
+
+      .pat-card { margin-bottom: 8px; }
+
+      .links { display: flex; flex-direction: column; gap: 10px; }
+
+      .link {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        transition: border-color 0.15s ease;
+      }
+      .link.is-open { border-color: var(--brand); }
+
+      .link-summary {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .link-summary:hover { background: var(--surface-soft); }
+      .link-caret {
+        flex: none;
+        width: 18px;
+        color: var(--text-faint);
+        font-size: 12px;
+        transition: transform 0.15s ease;
+      }
+      .link.is-open .link-caret { transform: rotate(90deg); }
+      .link-summary-text { flex: 1; min-width: 0; }
+      .link-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .link-sub {
+        font-size: 12px;
+        color: var(--text-faint);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 2px;
+      }
+      .link-badge {
+        flex: none;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 9px;
+        border-radius: 999px;
+        color: var(--brand);
+        background: var(--brand-soft);
+        text-transform: capitalize;
+      }
+      .link-badge.warn { color: var(--danger); background: var(--danger-soft); }
+
+      .link-body {
+        display: none;
+        flex-direction: column;
+        gap: 14px;
+        padding: 16px;
+        border-top: 1px solid var(--border);
+      }
+      .link.is-open .link-body { display: flex; }
+
+      .row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+        gap: 12px;
+        align-items: end;
+      }
+
+      .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+      label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+      }
+
+      select, input {
+        width: 100%;
+        height: 38px;
+        padding: 0 11px;
+        font-size: 14px;
+        color: var(--text);
+        background: var(--surface-soft);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        outline: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        appearance: none;
+        -webkit-appearance: none;
+      }
+      select {
+        background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'12'%20height%3D'8'%20viewBox%3D'0%200%2012%208'%3E%3Cpath%20fill%3D'%239aa1ad'%20d%3D'M6%208L0%200h12z'%2F%3E%3C%2Fsvg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 30px;
+        cursor: pointer;
+      }
+      input::placeholder { color: var(--text-faint); }
+      select:focus, input:focus {
+        border-color: var(--brand);
+        background: var(--surface);
+        box-shadow: 0 0 0 3px var(--brand-soft);
+      }
+      input.step { max-width: 110px; }
+
+      .remove {
+        height: 38px;
+        flex: none;
+        padding: 0 14px;
+        background: var(--danger-soft);
+        color: var(--danger);
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .remove:hover { background: var(--danger); color: #fff; }
+
+      .hint {
+        font-size: 12px;
+        color: var(--text-faint);
+        line-height: 1.45;
+        margin: 0;
+      }
+
+      .empty {
+        color: var(--text-faint);
+        font-style: normal;
+        text-align: center;
+        padding: 22px 12px;
+        background: var(--surface-soft);
+        border: 1px dashed var(--border);
+        border-radius: var(--radius);
+      }
+
+      .toolbar {
+        position: sticky;
+        bottom: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 26px;
+        padding: 14px 0 4px;
+        background: linear-gradient(to top, var(--bg) 60%, transparent);
+      }
+
+      button.action {
+        height: 42px;
+        padding: 0 18px;
+        font-size: 14px;
+        font-weight: 600;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+        transition: transform 0.05s ease, background 0.15s ease, border-color 0.15s ease;
+      }
+      button.action:hover { border-color: var(--brand); color: var(--brand); }
+      button.action:active { transform: translateY(1px); }
+
+      #save {
+        margin-left: auto;
+        background: var(--brand);
+        border-color: var(--brand);
+        color: #fff;
+      }
+      #save:hover { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+
+      @media (max-width: 620px) {
+        .row { grid-template-columns: 1fr; }
+        .remove { width: 100%; }
+        #save, #add, #addSensor { flex: 1 1 100%; }
+        #save { margin-left: 0; order: -1; }
+      }
     </style>
   </head>
   <body>
-    <h1 data-i18n="settings.title"></h1>
-    <p class="intro" data-i18n="settings.intro"></p>
-    <div class="link" style="margin-bottom:20px;">
-      <div class="field">
-        <label data-i18n="settings.patLabel"></label>
-        <input type="password" id="pat" autocomplete="off" spellcheck="false">
-        <span class="hint" data-i18n="settings.patHint"></span>
+    <div class="wrap">
+      <h1 data-i18n="settings.title"></h1>
+      <p class="intro" data-i18n="settings.intro"></p>
+
+      <div class="card pat-card">
+        <div class="field">
+          <label data-i18n="settings.patLabel"></label>
+          <input type="password" id="pat" autocomplete="off" spellcheck="false">
+          <span class="hint" data-i18n="settings.patHint"></span>
+        </div>
       </div>
-    </div>
-    <h2 data-i18n="settings.switchesTitle" style="margin:24px 0 8px;font-size:16px;"></h2>
-    <div id="links" class="links"></div>
-    <p id="empty" class="empty" data-i18n="settings.empty"></p>
 
-    <h2 data-i18n="settings.sensorsTitle" style="margin:24px 0 8px;font-size:16px;"></h2>
-    <div id="sensorLinks" class="links"></div>
-    <p id="sensorEmpty" class="empty" data-i18n="settings.sensorEmpty"></p>
+      <div class="tabs" role="tablist">
+        <button class="tab is-active" id="tabSwitches" role="tab">
+          <span data-i18n="settings.switchesTitle"></span><span class="count" id="countSwitches">0</span>
+        </button>
+        <button class="tab" id="tabSensors" role="tab">
+          <span data-i18n="settings.sensorsTitle"></span><span class="count" id="countSensors">0</span>
+        </button>
+      </div>
 
-    <div class="toolbar">
-      <button id="add" data-i18n="settings.add"></button>
-      <button id="addSensor" data-i18n="settings.addSensor"></button>
-      <button id="save" data-i18n="settings.save"></button>
+      <div class="panel is-active" id="panelSwitches" role="tabpanel">
+        <div id="links" class="links"></div>
+        <p id="empty" class="empty" data-i18n="settings.empty"></p>
+      </div>
+
+      <div class="panel" id="panelSensors" role="tabpanel">
+        <div id="sensorLinks" class="links"></div>
+        <p id="sensorEmpty" class="empty" data-i18n="settings.sensorEmpty"></p>
+      </div>
+
+      <div class="toolbar">
+        <button class="action" id="add" data-i18n="settings.add"></button>
+        <button class="action" id="addSensor" data-i18n="settings.addSensor"></button>
+        <button class="action" id="save" data-i18n="settings.save"></button>
+      </div>
     </div>
     <script type="text/javascript">
       let switches = [];
@@ -53,6 +362,23 @@
       let links = [];
       let sensorLinks = [];
       let homeyRef = null;
+      let activeTab = 'switches';
+
+      function setTab(tab) {
+        activeTab = tab;
+        const onSwitches = tab === 'switches';
+        document.getElementById('tabSwitches').classList.toggle('is-active', onSwitches);
+        document.getElementById('tabSensors').classList.toggle('is-active', !onSwitches);
+        document.getElementById('panelSwitches').classList.toggle('is-active', onSwitches);
+        document.getElementById('panelSensors').classList.toggle('is-active', !onSwitches);
+        document.getElementById('add').style.display = onSwitches ? '' : 'none';
+        document.getElementById('addSensor').style.display = onSwitches ? 'none' : '';
+      }
+
+      function updateCounts() {
+        document.getElementById('countSwitches').textContent = String(links.length);
+        document.getElementById('countSensors').textContent = String(sensorLinks.length);
+      }
 
       function escapeHtml(value) {
         return String(value || '').replace(/[&<>"']/g, (char) => ({
@@ -68,6 +394,82 @@
         const zone = d.zone ? d.zone + ' / ' : '';
         const suffix = d.type === 'dial' ? ' (IKEA dial)' : d.type === 'dual' ? ' (IKEA 2-button)' : '';
         return zone + d.name + suffix;
+      }
+
+      function nameOf(list, id, fallback) {
+        const d = list.find((x) => x.id === id);
+        return d ? d.name : (fallback || '');
+      }
+
+      // Build the collapsed-row summary for a switch link.
+      function switchSummary(link) {
+        const swName = nameOf(switches, link.switchId);
+        if (!swName) return { title: '', sub: '', mode: '', incomplete: true };
+
+        let sub;
+        let incomplete = false;
+        if (link.type === 'dial') {
+          const named = link.slots
+            .map((s) => nameOf(lights, s.lightId))
+            .filter(Boolean);
+          sub = named.length ? named.join(', ') : '';
+          incomplete = named.length === 0;
+          return { title: swName, sub, mode: 'dial', incomplete };
+        }
+        if (link.mode === 'split') {
+          const a = nameOf(lights, link.lightId);
+          const b = nameOf(lights, link.lightId2);
+          sub = [a, b].filter(Boolean).join('  •  ');
+          incomplete = !a || !b;
+        } else {
+          sub = nameOf(lights, link.lightId);
+          incomplete = !sub;
+        }
+        return { title: swName, sub, mode: link.mode || 'dimmer', incomplete };
+      }
+
+      // Build the collapsed-row summary for a sensor link.
+      function sensorSummary(link) {
+        const sName = nameOf(sensors, link.sensorId);
+        if (!sName) return { title: '', sub: '', mode: '', incomplete: true };
+        const lightName = nameOf(lights, link.lightId);
+        const sub = lightName
+          ? lightName + '  •  ' + link.timeoutMinutes + ' min'
+          : '';
+        return { title: sName, sub, mode: link.mode || 'normal', incomplete: !lightName };
+      }
+
+      // Decorate a row container with a clickable summary header. `built` is the
+      // summary object; `body` is the HTMLElement holding the editable fields.
+      function makeCollapsible(link, built, body) {
+        const row = document.createElement('div');
+        row.className = 'link' + (link._open ? ' is-open' : '');
+
+        const summary = document.createElement('div');
+        summary.className = 'link-summary';
+        const badge = built.mode
+          ? '<span class="link-badge' + (built.incomplete ? ' warn' : '') + '">' + escapeHtml(built.mode) + '</span>'
+          : '';
+        summary.innerHTML = ''
+          + '<span class="link-caret">▶</span>'
+          + '<span class="link-summary-text">'
+          + '<div class="link-title">' + (escapeHtml(built.title) || '<span style="color:var(--text-faint)">Not configured</span>') + '</div>'
+          + (built.sub ? '<div class="link-sub">' + escapeHtml(built.sub) + '</div>' : '')
+          + '</span>'
+          + badge;
+
+        summary.addEventListener('click', () => {
+          link._open = !link._open;
+          row.classList.toggle('is-open', link._open);
+        });
+
+        const bodyWrap = document.createElement('div');
+        bodyWrap.className = 'link-body';
+        bodyWrap.appendChild(body);
+
+        row.appendChild(summary);
+        row.appendChild(bodyWrap);
+        return row;
       }
 
       function switchOptionsHtml(selectedId) {
@@ -149,15 +551,16 @@
 
         links.forEach((link, index) => {
           normalizeLink(link);
-          const row = document.createElement('div');
-          row.className = 'link';
-          row.innerHTML = ''
+          const body = document.createElement('div');
+          body.innerHTML = ''
             + '<div class="row"><div class="field"><label data-i18n="settings.switch"></label><select data-role="switch">' + switchOptionsHtml(link.switchId) + '</select></div>'
             + (link.type === 'dial' ? renderDialFields(link) : renderDualFields(link))
             + '<button class="remove" data-i18n="settings.remove"></button></div>'
             + '<div class="hint" data-i18n="' + (link.type === 'dial' ? 'settings.dialHint' : 'settings.dualHint') + '"></div>';
 
-          row.querySelector('[data-role="switch"]').addEventListener('change', (e) => {
+          const row = makeCollapsible(link, switchSummary(link), body);
+
+          body.querySelector('[data-role="switch"]').addEventListener('change', (e) => {
             link.switchId = e.target.value;
             const sw = selectedSwitch(link);
             link.type = sw ? sw.type : '';
@@ -165,24 +568,24 @@
             render();
           });
 
-          const mode = row.querySelector('[data-role="mode"]');
+          const mode = body.querySelector('[data-role="mode"]');
           if (mode) mode.addEventListener('change', (e) => { link.mode = e.target.value; render(); });
 
-          const light = row.querySelector('[data-role="light"]');
-          if (light) light.addEventListener('change', (e) => { link.lightId = e.target.value; });
+          const light = body.querySelector('[data-role="light"]');
+          if (light) light.addEventListener('change', (e) => { link.lightId = e.target.value; render(); });
 
-          const light2 = row.querySelector('[data-role="light2"]');
-          if (light2) light2.addEventListener('change', (e) => { link.lightId2 = e.target.value; });
+          const light2 = body.querySelector('[data-role="light2"]');
+          if (light2) light2.addEventListener('change', (e) => { link.lightId2 = e.target.value; render(); });
 
           ['slot1', 'slot2', 'slot3'].forEach((role, slotIndex) => {
-            const slot = row.querySelector('[data-role="' + role + '"]');
-            if (slot) slot.addEventListener('change', (e) => { link.slots[slotIndex].lightId = e.target.value; });
+            const slot = body.querySelector('[data-role="' + role + '"]');
+            if (slot) slot.addEventListener('change', (e) => { link.slots[slotIndex].lightId = e.target.value; render(); });
           });
 
-          const fadeStep = row.querySelector('[data-role="fadeStep"]');
+          const fadeStep = body.querySelector('[data-role="fadeStep"]');
           if (fadeStep) fadeStep.addEventListener('input', (e) => { link.fadeStep = Math.abs(Number(e.target.value)); });
 
-          row.querySelector('.remove').addEventListener('click', () => {
+          body.querySelector('.remove').addEventListener('click', () => {
             links.splice(index, 1);
             render();
           });
@@ -191,6 +594,7 @@
         });
 
         if (homeyRef) homeyRef.translateElement(container);
+        updateCounts();
         renderSensors();
       }
 
@@ -207,9 +611,8 @@
           link.midnightBright = Number.isFinite(Number(link.midnightBright)) ? Math.max(0, Math.min(100, Number(link.midnightBright))) : 5;
 
           const isNight = link.mode === 'night';
-          const row = document.createElement('div');
-          row.className = 'link';
-          row.innerHTML = ''
+          const body = document.createElement('div');
+          body.innerHTML = ''
             + '<div class="row">'
             + '<div class="field"><label data-i18n="settings.sensor"></label><select data-role="sensor">' + sensorOptionsHtml(link.sensorId) + '</select></div>'
             + '<div class="field"><label data-i18n="settings.sensorLight"></label><select data-role="light">' + lightOptionsHtml(link.lightId) + '</select></div>'
@@ -222,17 +625,20 @@
             + '<div class="field" style="' + (isNight ? '' : 'display:none') + '"><label data-i18n="settings.sensorMidnightBright"></label><input class="step" type="number" min="0" max="100" data-role="midnightBright" value="' + link.midnightBright + '"></div>'
             + '<button class="remove" data-i18n="settings.remove"></button></div>';
 
-          row.querySelector('[data-role="sensor"]').addEventListener('change', (e) => { link.sensorId = e.target.value; });
-          row.querySelector('[data-role="light"]').addEventListener('change', (e) => { link.lightId = e.target.value; });
-          const mode = row.querySelector('[data-role="mode"]');
+          const row = makeCollapsible(link, sensorSummary(link), body);
+
+          body.querySelector('[data-role="sensor"]').addEventListener('change', (e) => { link.sensorId = e.target.value; renderSensors(); });
+          body.querySelector('[data-role="light"]').addEventListener('change', (e) => { link.lightId = e.target.value; renderSensors(); });
+          const mode = body.querySelector('[data-role="mode"]');
           if (mode) mode.addEventListener('change', (e) => { link.mode = e.target.value; renderSensors(); });
-          const timeout = row.querySelector('[data-role="timeoutMinutes"]');
+          const timeout = body.querySelector('[data-role="timeoutMinutes"]');
+          if (timeout) timeout.addEventListener('change', (e) => { link.timeoutMinutes = Math.max(1, Math.min(120, Number(e.target.value))); renderSensors(); });
           if (timeout) timeout.addEventListener('input', (e) => { link.timeoutMinutes = Math.max(1, Math.min(120, Number(e.target.value))); });
-          const sunsetBright = row.querySelector('[data-role="sunsetBright"]');
+          const sunsetBright = body.querySelector('[data-role="sunsetBright"]');
           if (sunsetBright) sunsetBright.addEventListener('input', (e) => { link.sunsetBright = Math.max(0, Math.min(100, Number(e.target.value))); });
-          const midnightBright = row.querySelector('[data-role="midnightBright"]');
+          const midnightBright = body.querySelector('[data-role="midnightBright"]');
           if (midnightBright) midnightBright.addEventListener('input', (e) => { link.midnightBright = Math.max(0, Math.min(100, Number(e.target.value))); });
-          row.querySelector('.remove').addEventListener('click', () => {
+          body.querySelector('.remove').addEventListener('click', () => {
             sensorLinks.splice(index, 1);
             renderSensors();
           });
@@ -241,6 +647,7 @@
         });
 
         if (homeyRef) homeyRef.translateElement(container);
+        updateCounts();
       }
 
       function onHomeyReady(Homey) {
@@ -292,13 +699,18 @@
           });
         });
 
+        document.getElementById('tabSwitches').addEventListener('click', () => setTab('switches'));
+        document.getElementById('tabSensors').addEventListener('click', () => setTab('sensors'));
+
         document.getElementById('add').addEventListener('click', () => {
-          links.push({ switchId: '', type: '', mode: 'dimmer', lightId: '', lightId2: '', slots: [{ lightId: '' }, { lightId: '' }, { lightId: '' }], fadeStep: 8 });
+          setTab('switches');
+          links.push({ switchId: '', type: '', mode: 'dimmer', lightId: '', lightId2: '', slots: [{ lightId: '' }, { lightId: '' }, { lightId: '' }], fadeStep: 8, _open: true });
           render();
         });
 
         document.getElementById('addSensor').addEventListener('click', () => {
-          sensorLinks.push({ sensorId: '', lightId: '', mode: 'normal', timeoutMinutes: 5, sunsetBright: 50, midnightBright: 5 });
+          setTab('sensors');
+          sensorLinks.push({ sensorId: '', lightId: '', mode: 'normal', timeoutMinutes: 5, sunsetBright: 50, midnightBright: 5, _open: true });
           renderSensors();
         });
 
@@ -326,6 +738,8 @@
             });
           });
         });
+
+        setTab('switches');
       }
     </script>
   </body>
