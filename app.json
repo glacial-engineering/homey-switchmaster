@@ -40,6 +40,12 @@
     "name": "Glacial Engineering",
     "email": "github@glacial.engineering"
   },
+  "source": "https://github.com/glacial-engineering/homey-switchmaster",
+  "homepage": "https://github.com/glacial-engineering/homey-switchmaster",
+  "bugs": {
+    "url": "https://github.com/glacial-engineering/homey-switchmaster/issues"
+  },
+  "support": "mailto:github@glacial.engineering",
   "api": {
     "getDevices": {
       "method": "GET",
