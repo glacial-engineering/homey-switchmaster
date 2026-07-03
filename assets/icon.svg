@@ -1,6 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
-  <rect x="120" y="70" width="120" height="360" rx="24" fill="none" stroke="currentColor" stroke-width="28"/>
-  <rect x="150" y="100" width="60" height="150" rx="16" fill="currentColor"/>
-  <circle cx="360" cy="250" r="95" fill="none" stroke="currentColor" stroke-width="28"/>
-  <path d="M360 175 L360 250 L408 298" fill="none" stroke="currentColor" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- connecting lines: start outside the switch body, run to orbiting devices -->
+  <path d="M168 175 L142 149 M332 175 L358 149 M168 325 L142 351 M332 325 L358 351" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round"/>
+  <!-- orbiting device nodes -->
+  <circle cx="120" cy="120" r="30" fill="none" stroke="currentColor" stroke-width="22"/>
+  <circle cx="380" cy="120" r="30" fill="none" stroke="currentColor" stroke-width="22"/>
+  <circle cx="120" cy="380" r="30" fill="none" stroke="currentColor" stroke-width="22"/>
+  <circle cx="380" cy="380" r="30" fill="none" stroke="currentColor" stroke-width="22"/>
+  <!-- central toggle switch (horizontal rocker, toggled ON to the right) -->
+  <rect x="170" y="205" width="160" height="90" rx="45" fill="none" stroke="currentColor" stroke-width="26"/>
+  <circle cx="285" cy="250" r="24" fill="currentColor"/>
 </svg>
