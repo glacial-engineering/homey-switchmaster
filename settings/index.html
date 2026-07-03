@@ -5,12 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script type="text/javascript" src="/homey.js" data-origin="settings"></script>
     <style>
+      /*
+       * Homey wraps this page in its own webview and applies dark mode as a
+       * post-render inversion of the app chrome around us — the page itself
+       * is always painted in light mode and never sees prefers-color-scheme
+       * or any dark-mode class. So: light-mode-only palette, anchored on
+       * pure #fff/#000 (off-tones invert to muddy gray instead of clean
+       * black/white). Do not add a dark-mode media query back in.
+       */
       :root {
-        --bg: #f5f6f8;
+        --bg: #ffffff;
         --surface: #ffffff;
-        --surface-soft: #f9fafb;
+        --surface-soft: #f5f6f8;
         --border: #e6e8ec;
-        --text: #1f2430;
+        --text: #000000;
         --text-soft: #6b7280;
         --text-faint: #9aa1ad;
         --brand: #2563eb;
@@ -20,23 +28,6 @@
         --radius: 14px;
         --radius-sm: 10px;
         --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 16px rgba(16, 24, 40, 0.06);
-      }
-
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #14161a;
-          --surface: #1c1f26;
-          --surface-soft: #22262f;
-          --border: #2c313b;
-          --text: #e8eaed;
-          --text-soft: #9aa1ad;
-          --text-faint: #6b7280;
-          --brand: #5b8bff;
-          --brand-soft: #1f2a44;
-          --danger: #f87171;
-          --danger-soft: #2a1d1f;
-          --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.35);
-        }
       }
 
       * { box-sizing: border-box; }
@@ -207,7 +198,7 @@
         font-weight: 600;
         letter-spacing: 0.03em;
         text-transform: uppercase;
-        color: var(--text-faint);
+        color: var(--text-faint) !important;
       }
 
       select, input {
