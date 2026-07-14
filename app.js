@@ -121,6 +121,8 @@ class SwitchMasterApp extends Homey.App {
         mode: l.mode || 'dimmer',
         lightId: l.lightId || '',
         lightId2: l.lightId2 || '',
+        holdLightId: l.holdLightId || '',
+        holdLightId2: l.holdLightId2 || '',
         slots: Array.isArray(l.slots) ? l.slots.slice(0, 3).map((slot) => ({
           lightId: slot && slot.lightId ? slot.lightId : '',
         })) : [{ lightId: '' }, { lightId: '' }, { lightId: '' }],
@@ -322,6 +324,10 @@ class SwitchMasterApp extends Homey.App {
     return this.flowCard('trigger', `homey:device:${switchId}:switch_press_multi`, { button: String(buttonId) });
   }
 
+  triggerForButtonHold(switchId, buttonId) {
+    return this.flowCard('trigger', `homey:device:${switchId}:switch_long_press_multi`, { button: String(buttonId) });
+  }
+
   lightAction(light, action, stepPercent) {
     const caps = light.capabilities || [];
     const baseId = `homey:device:${light.id}`;
@@ -380,7 +386,7 @@ class SwitchMasterApp extends Homey.App {
     }
   }
 
-  buildDualButtonFlows(link, sw, light, light2, folderId) {
+  buildDualButtonFlows(link, sw, light, light2, holdLight, holdLight2, folderId) {
     const flows = [];
     const prefix = sw.name;
 
@@ -397,6 +403,20 @@ class SwitchMasterApp extends Homey.App {
         this.lightAction(light, 'off'),
         folderId,
       ));
+      if (holdLight) {
+        this.addFlow(flows, this.makeFlow(
+          `${prefix} - top hold on`,
+          this.triggerForButtonHold(sw.id, 1),
+          this.lightAction(holdLight, 'on'),
+          folderId,
+        ));
+        this.addFlow(flows, this.makeFlow(
+          `${prefix} - bottom hold off`,
+          this.triggerForButtonHold(sw.id, 2),
+          this.lightAction(holdLight, 'off'),
+          folderId,
+        ));
+      }
       return flows;
     }
 
@@ -413,6 +433,22 @@ class SwitchMasterApp extends Homey.App {
         this.lightAction(light2 || light, 'toggle'),
         folderId,
       ));
+      if (holdLight) {
+        this.addFlow(flows, this.makeFlow(
+          `${prefix} - top hold toggle`,
+          this.triggerForButtonHold(sw.id, 1),
+          this.lightAction(holdLight, 'toggle'),
+          folderId,
+        ));
+      }
+      if (holdLight2) {
+        this.addFlow(flows, this.makeFlow(
+          `${prefix} - bottom hold toggle`,
+          this.triggerForButtonHold(sw.id, 2),
+          this.lightAction(holdLight2, 'toggle'),
+          folderId,
+        ));
+      }
       return flows;
     }
 
@@ -489,7 +525,11 @@ class SwitchMasterApp extends Homey.App {
           this.error(`Skipping "${sw.name}": light ${link.lightId} not found`);
           continue;
         }
-        flows.push(...this.buildDualButtonFlows(link, sw, light, devices[link.lightId2], folderId));
+        flows.push(...this.buildDualButtonFlows(
+          link, sw, light, devices[link.lightId2],
+          devices[link.holdLightId], devices[link.holdLightId2],
+          folderId,
+        ));
       } else if (type === 'dial') {
         flows.push(...this.buildDialFlows(link, sw, devices, folderId));
       } else {

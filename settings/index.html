@@ -495,6 +495,8 @@
           link.mode = link.mode || 'dimmer';
           link.lightId = link.lightId || '';
           link.lightId2 = link.lightId2 || '';
+          link.holdLightId = link.holdLightId || '';
+          link.holdLightId2 = link.holdLightId2 || '';
         } else if (link.type === 'dial') {
           link.mode = 'dial';
           link.slots = Array.isArray(link.slots) ? link.slots : [{ lightId: '' }, { lightId: '' }, { lightId: '' }];
@@ -507,7 +509,8 @@
 
       function renderDualFields(link) {
         const showSecond = link.mode === 'split';
-        return ''
+        const showHold = link.mode === 'onoff' || link.mode === 'split';
+        let html = ''
           + '<div class="field"><label data-i18n="settings.mode"></label><select data-role="mode">'
           + '<option value="dimmer"' + (link.mode === 'dimmer' ? ' selected' : '') + ' data-i18n="settings.modeDimmer"></option>'
           + '<option value="onoff"' + (link.mode === 'onoff' ? ' selected' : '') + ' data-i18n="settings.modeOnoff"></option>'
@@ -516,6 +519,16 @@
           + '<div class="field"><label data-i18n="' + (showSecond ? 'settings.topLight' : 'settings.light') + '"></label><select data-role="light">' + lightOptionsHtml(link.lightId) + '</select></div>'
           + '<div class="field" style="' + (showSecond ? '' : 'display:none') + '"><label data-i18n="settings.bottomLight"></label><select data-role="light2">' + lightOptionsHtml(link.lightId2) + '</select></div>'
           + '<div class="field" style="' + (link.mode === 'dimmer' ? '' : 'display:none') + '"><label data-i18n="settings.fadeStep"></label><input class="step" type="number" min="1" max="100" data-role="fadeStep" value="' + link.fadeStep + '"></div>';
+
+        if (showHold) {
+          const holdLabel = showSecond ? 'settings.topHoldLight' : 'settings.holdLight';
+          html += '<div class="field"><label data-i18n="' + holdLabel + '"></label><select data-role="holdLight">' + lightOptionsHtml(link.holdLightId) + '</select></div>';
+          if (showSecond) {
+            html += '<div class="field"><label data-i18n="settings.bottomHoldLight"></label><select data-role="holdLight2">' + lightOptionsHtml(link.holdLightId2) + '</select></div>';
+          }
+        }
+
+        return html;
       }
 
       function renderDialFields(link) {
@@ -559,6 +572,12 @@
 
           const light2 = body.querySelector('[data-role="light2"]');
           if (light2) light2.addEventListener('change', (e) => { link.lightId2 = e.target.value; render(); });
+
+          const holdLight = body.querySelector('[data-role="holdLight"]');
+          if (holdLight) holdLight.addEventListener('change', (e) => { link.holdLightId = e.target.value; render(); });
+
+          const holdLight2 = body.querySelector('[data-role="holdLight2"]');
+          if (holdLight2) holdLight2.addEventListener('change', (e) => { link.holdLightId2 = e.target.value; render(); });
 
           ['slot1', 'slot2', 'slot3'].forEach((role, slotIndex) => {
             const slot = body.querySelector('[data-role="' + role + '"]');
@@ -651,6 +670,8 @@
               mode: l.mode || 'dimmer',
               lightId: l.lightId || '',
               lightId2: l.lightId2 || '',
+              holdLightId: l.holdLightId || '',
+              holdLightId2: l.holdLightId2 || '',
               slots: Array.isArray(l.slots) ? l.slots : [{ lightId: '' }, { lightId: '' }, { lightId: '' }],
               fadeStep: Number.isFinite(Number(l.fadeStep)) ? Math.abs(Number(l.fadeStep)) : 8,
             }));
@@ -687,7 +708,7 @@
 
         document.getElementById('add').addEventListener('click', () => {
           setTab('switches');
-          links.push({ switchId: '', type: '', mode: 'dimmer', lightId: '', lightId2: '', slots: [{ lightId: '' }, { lightId: '' }, { lightId: '' }], fadeStep: 8, _open: true });
+          links.push({ switchId: '', type: '', mode: 'dimmer', lightId: '', lightId2: '', holdLightId: '', holdLightId2: '', slots: [{ lightId: '' }, { lightId: '' }, { lightId: '' }], fadeStep: 8, _open: true });
           render();
         });
 
